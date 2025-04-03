@@ -160,7 +160,7 @@ class TemplateAgent(DefaultParty):
                 normalized_time = 0.0
 
             # update opponent model with bid
-            self.opponent_model.update(bid, normalized_time)
+            self.opponent_model.update(bid, normalized_time, our_utility_func=self.profile.getUtility)
             # set bid as last received
             self.last_received_bid = bid
 
@@ -213,18 +213,22 @@ class TemplateAgent(DefaultParty):
         planned_bid = self.find_bid()
         planned_util = float(self.profile.getUtility(planned_bid))
 
-        # === 🛡️ Reservation Utility Threshold ===
-        # Option 1: Static threshold (e.g. never accept below 0.4)
-        # if my_util < 0.4:
-        #     return False
-
-        # Option 2: Dynamic threshold — becomes softer as time progresses
+        # Dynamic threshold — becomes softer as time progresses
         reservation_threshold = 0.6 - 0.4 * progress
+
+        # reject weak offers and wait for better ones, knowing the opponent is likely to give in
+        if self.opponent_model and self.opponent_model.is_conceder:
+            reservation_threshold += 0.05
+
         if my_util < reservation_threshold:
             return False
 
-        # Accept if offer is better than what we would offer with a better threshold
-        return my_util >= max(target_util, 0.85 * planned_util)
+        # Accept if offer is better than what we would offer with a better threshold,
+        # act more greedy if opponent is a conceder
+        if self.opponent_model and self.opponent_model.is_conceder:
+            return my_util >= 0.95 * planned_util  # more greedy
+        else:
+            return my_util >= max(target_util, 0.85 * planned_util)
 
     def find_bid(self) -> Bid:
         domain = self.profile.getDomain()
@@ -232,6 +236,11 @@ class TemplateAgent(DefaultParty):
 
         progress = self.progress.get(time() * 1000)
         target_util = self.get_target_utility(progress, beta=0.2)
+
+        # If they’re conceding, they’ll come to you.
+        if self.opponent_model and self.opponent_model.is_conceder:
+            target_util = min(target_util + 0.05, 1.0)
+
         margin = 0.05  # accept bids within this range
 
         candidate_bids = []

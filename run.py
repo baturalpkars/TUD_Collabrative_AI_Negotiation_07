@@ -22,8 +22,8 @@ settings = {
             "parameters": {"storage_dir": "agent_storage/TemplateAgent"},
         },
         {
-            "class": "agents.stupid_agent.stupid_agent.StupidAgent",
-            "parameters": {"storage_dir": "agent_storage/StupidAgent"},
+            "class": "agents.boulware_agent.boulware_agent.BoulwareAgent",
+            "parameters": {"storage_dir": "agent_storage/BoulwareAgent"},
         },
     ],
     "profiles": ["domains/domain00/profileA.json", "domains/domain00/profileB.json"],

@@ -16,7 +16,10 @@ class OpponentModel:
             i: IssueEstimator(v) for i, v in domain.getIssuesValues().items()
         }
 
-    def update(self, bid: Bid, time: float):
+        self.my_utilities = []  # Utility of their bids from our perspective
+        self.is_conceder = False  # Flag
+
+    def update(self, bid: Bid, time: float, our_utility_func=None):
         if self.offers:
             prev_bid = self.offers[-1]
             similarity = self._calculate_similarity(prev_bid, bid)
@@ -25,13 +28,24 @@ class OpponentModel:
         # keep track of all bids received
         self.offers.append(bid)
 
-        print(f"\n[OpponentModel] Time: {time:.2f}")
-        print(f"[OpponentModel] Consistency score: {self.consistency_score:.4f}")
-        print("[OpponentModel] Current issue weights:")
+        if our_utility_func:
+            self.my_utilities.append(our_utility_func(bid))
+            self._detect_conceder()
+
+        # print(f"\n[OpponentModel] Time: {time:.2f}")
+        # print(f"[OpponentModel] Consistency score: {self.consistency_score:.4f}")
+        # print("[OpponentModel] Current issue weights:")
 
         # update all issue estimators with the value that is offered for that issue
         for issue_id, issue_estimator in self.issue_estimators.items():
             issue_estimator.update(bid.getValue(issue_id), time)
+
+    def _detect_conceder(self, window=5, threshold=0.2):
+        if len(self.my_utilities) >= 2 * window:
+            early = sum(self.my_utilities[:window]) / window
+            recent = sum(self.my_utilities[-window:]) / window
+            if (recent - early) >= threshold:
+                self.is_conceder = True
 
     def _calculate_similarity(self, bid1: Bid, bid2: Bid):
         matches = 0
