@@ -137,7 +137,7 @@ class TemplateAgent(DefaultParty):
         Returns:
             str: Agent description
         """
-        return "Template agent for the ANL 2022 competition"
+        return "Template agent of group 7 from TUD_CAI"
 
     def opponent_action(self, action):
         """Process an action that was received from the opponent.
@@ -153,8 +153,14 @@ class TemplateAgent(DefaultParty):
 
             bid = cast(Offer, action).getBid()
 
+            # Get normalized time (0 to 1) from the progress object
+            if self.progress is not None:
+                normalized_time = self.progress.get(time() * 1000)
+            else:
+                normalized_time = 0.0
+
             # update opponent model with bid
-            self.opponent_model.update(bid)
+            self.opponent_model.update(bid, normalized_time)
             # set bid as last received
             self.last_received_bid = bid
 
@@ -186,6 +192,13 @@ class TemplateAgent(DefaultParty):
     ###########################################################################################
     ################################## Example methods below ##################################
     ###########################################################################################
+    def get_target_utility(self, progress: float, beta: float = 0.2) -> float:
+        """
+        Computes a time-dependent utility threshold.
+        Boulware (beta < 1): high utility until late rounds.
+        Conceder (beta > 1): faster concession.
+        """
+        return 1 - (progress ** (1 / beta))
 
     def accept_condition(self, bid: Bid) -> bool:
         if bid is None:
@@ -193,55 +206,83 @@ class TemplateAgent(DefaultParty):
 
         # progress of the negotiation session between 0 and 1 (1 is deadline)
         progress = self.progress.get(time() * 1000)
+        my_util = float(self.profile.getUtility(bid))
+        target_util = self.get_target_utility(progress, beta=0.2)
 
-        # very basic approach that accepts if the offer is valued above 0.7 and
-        # 95% of the time towards the deadline has passed
-        conditions = [
-            self.profile.getUtility(bid) > 0.8,
-            progress > 0.95,
-        ]
-        return all(conditions)
+        # Optional: Predict our next bid's utility
+        planned_bid = self.find_bid()
+        planned_util = float(self.profile.getUtility(planned_bid))
+
+        # === 🛡️ Reservation Utility Threshold ===
+        # Option 1: Static threshold (e.g. never accept below 0.4)
+        # if my_util < 0.4:
+        #     return False
+
+        # Option 2: Dynamic threshold — becomes softer as time progresses
+        reservation_threshold = 0.6 - 0.4 * progress
+        if my_util < reservation_threshold:
+            return False
+
+        # Accept if offer is better than what we would offer with a better threshold
+        return my_util >= max(target_util, 0.85 * planned_util)
 
     def find_bid(self) -> Bid:
-        # compose a list of all possible bids
         domain = self.profile.getDomain()
         all_bids = AllBidsList(domain)
 
-        best_bid_score = 0.0
-        best_bid = None
+        progress = self.progress.get(time() * 1000)
+        target_util = self.get_target_utility(progress, beta=0.2)
+        margin = 0.05  # accept bids within this range
 
-        # take 500 attempts to find a bid according to a heuristic score
-        for _ in range(500):
+        candidate_bids = []
+
+        for _ in range(1000):
             bid = all_bids.get(randint(0, all_bids.size() - 1))
-            bid_score = self.score_bid(bid)
-            if bid_score > best_bid_score:
-                best_bid_score, best_bid = bid_score, bid
+            util = float(self.profile.getUtility(bid))
+            if abs(util - target_util) <= margin:
+                candidate_bids.append(bid)
+
+        if not candidate_bids:
+            return all_bids.get(randint(0, all_bids.size() - 1))
+
+        best_bid = max(candidate_bids, key=self.score_bid)
 
         return best_bid
 
-    def score_bid(self, bid: Bid, alpha: float = 0.95, eps: float = 0.1) -> float:
-        """Calculate heuristic score for a bid
+    def score_bid(self, bid: Bid, alpha_start: float = 0.95, alpha_end: float = 0.5, eps: float = 0.1) -> float:
+        """
+        Calculates a dynamic heuristic score for a bid.
+
+        - Early in negotiation: prioritize self-utility (high alpha).
+        - Late in negotiation: reduce alpha to care more about opponent.
+        - Uses time pressure (via eps) to adjust behavior over time.
 
         Args:
-            bid (Bid): Bid to score
-            alpha (float, optional): Trade-off factor between self interested and
-                altruistic behaviour. Defaults to 0.95.
-            eps (float, optional): Time pressure factor, balances between conceding
-                and Boulware behaviour over time. Defaults to 0.1.
+            bid (Bid): Bid to evaluate.
+            alpha_start (float): Starting weight for self-utility.
+            alpha_end (float): Ending weight for self-utility.
+            eps (float): Controls time pressure sensitivity.
 
         Returns:
-            float: score
+            float: Composite score.
         """
         progress = self.progress.get(time() * 1000)
 
+        # Linearly interpolate alpha over time
+        alpha = alpha_start - (alpha_start - alpha_end) * progress
+
+        # Your own utility
         our_utility = float(self.profile.getUtility(bid))
 
+        # Time pressure: slows down concessions at first
         time_pressure = 1.0 - progress ** (1 / eps)
+
         score = alpha * time_pressure * our_utility
 
+        # Consider opponent utility more over time
         if self.opponent_model is not None:
             opponent_utility = self.opponent_model.get_predicted_utility(bid)
-            opponent_score = (1.0 - alpha * time_pressure) * opponent_utility
+            opponent_score = (1.0 - alpha) * time_pressure * opponent_utility
             score += opponent_score
 
         return score

@@ -10,18 +10,35 @@ class OpponentModel:
     def __init__(self, domain: Domain):
         self.offers = []
         self.domain = domain
+        self.consistency_score = 0.0
 
         self.issue_estimators = {
             i: IssueEstimator(v) for i, v in domain.getIssuesValues().items()
         }
 
-    def update(self, bid: Bid):
+    def update(self, bid: Bid, time: float):
+        if self.offers:
+            prev_bid = self.offers[-1]
+            similarity = self._calculate_similarity(prev_bid, bid)
+            self.consistency_score += similarity
+
         # keep track of all bids received
         self.offers.append(bid)
 
+        print(f"\n[OpponentModel] Time: {time:.2f}")
+        print(f"[OpponentModel] Consistency score: {self.consistency_score:.4f}")
+        print("[OpponentModel] Current issue weights:")
+
         # update all issue estimators with the value that is offered for that issue
         for issue_id, issue_estimator in self.issue_estimators.items():
-            issue_estimator.update(bid.getValue(issue_id))
+            issue_estimator.update(bid.getValue(issue_id), time)
+
+    def _calculate_similarity(self, bid1: Bid, bid2: Bid):
+        matches = 0
+        for issue in self.domain.getIssues():
+            if bid1.getValue(issue) == bid2.getValue(issue):
+                matches += 1
+        return matches / len(self.domain.getIssues())
 
     def get_predicted_utility(self, bid: Bid):
         if len(self.offers) == 0 or bid is None:
@@ -54,6 +71,8 @@ class OpponentModel:
             [iw * vu for iw, vu in zip(issue_weights, value_utilities)]
         )
 
+        print(f"[OpponentModel] Predicted utility for bid {bid.getIssueValues()}: {predicted_utility:.4f}")
+
         return predicted_utility
 
 
@@ -69,15 +88,16 @@ class IssueEstimator:
         self.num_values = value_set.size()
         self.value_trackers = defaultdict(ValueEstimator)
         self.weight = 0
+        self.time_series = defaultdict(list)
 
-    def update(self, value: Value):
+    def update(self, value: Value, time: float):
         self.bids_received += 1
 
         # get the value tracker of the value that is offered
         value_tracker = self.value_trackers[value]
 
         # register that this value was offered
-        value_tracker.update()
+        value_tracker.update(time)
 
         # update the count of the most common offered value
         self.max_value_count = max([value_tracker.count, self.max_value_count])
@@ -94,7 +114,17 @@ class IssueEstimator:
 
         # recalculate all value utilities
         for value_tracker in self.value_trackers.values():
-            value_tracker.recalculate_utility(self.max_value_count, self.weight)
+            value_tracker.recalculate_utility(self.max_value_count, self.weight, time)
+
+        self.time_series[value].append(time)
+
+        # Estimate time-based concession
+        recent_times = self.time_series[value][-3:]
+        if len(recent_times) >= 2:
+            time_diff = recent_times[-1] - recent_times[0]
+            # Increase concession weight if value was offered at later stage
+            if time_diff > 0.3:
+                self.weight *= 0.9  # Penalize issue if it's changing often late-game
 
     def get_value_utility(self, value: Value):
         if value in self.value_trackers:
@@ -107,15 +137,18 @@ class ValueEstimator:
     def __init__(self):
         self.count = 0
         self.utility = 0
+        self.last_time = 0
 
-    def update(self):
+    def update(self, time: float):
         self.count += 1
+        self.last_time = time
 
-    def recalculate_utility(self, max_value_count: int, weight: float):
+    def recalculate_utility(self, max_value_count: int, weight: float, current_time: float):
+        time_decay = 1 / (1 + (current_time - self.last_time))
         if weight < 1:
             mod_value_count = ((self.count + 1) ** (1 - weight)) - 1
             mod_max_value_count = ((max_value_count + 1) ** (1 - weight)) - 1
 
-            self.utility = mod_value_count / mod_max_value_count
+            self.utility = mod_value_count / mod_max_value_count * time_decay
         else:
             self.utility = 1
