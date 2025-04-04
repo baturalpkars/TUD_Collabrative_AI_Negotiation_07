@@ -19,7 +19,7 @@ tournament_settings = {
     "agents": [
         {
             "class": "agents.group7_agent2.template_agent.TemplateAgent",
-            "parameters": {"storage_dir": "agent_storage/TemplateAgent2"},
+            "parameters": {"storage_dir": "agent_storage/TemplateAgent"},
         },
         # {
         #     "class": "agents.boulware_agent.boulware_agent.BoulwareAgent",
@@ -29,7 +29,7 @@ tournament_settings = {
         # },
         # {
         #     "class": "agents.hardliner_agent.hardliner_agent.HardlinerAgent",
-        # },
+        # },    
         {
             "class": "agents.linear_agent.linear_agent.LinearAgent",
         },
