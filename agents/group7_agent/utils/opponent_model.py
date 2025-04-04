@@ -144,6 +144,29 @@ class OpponentModel:
 
         return predicted_utility
 
+    # Returns a score [0,1] indicating how familiar the opponent is with the values in this bid.
+    def get_value_familiarity(self, bid: Bid) -> float:
+        """Returns a score [0,1] indicating how familiar the opponent is with the values in this bid."""
+        familiar = 0
+        total = 0
+        for issue_id, estimator in self.issue_estimators.items():
+            val = bid.getValue(issue_id)
+            total += 1
+            if val in estimator.value_trackers:
+                familiar += estimator.value_trackers[val].count
+        return familiar / max(total, 1)
+
+    def get_recent_utility_trend(self, window=4) -> float:
+        """
+        Returns the trend (slope) of opponent utility over the last few offers.
+        Positive = increasing, Negative = decreasing.
+        """
+        if len(self.my_utilities) < window:
+            return 0.0  # Not enough data
+        recent = self.my_utilities[-window:]
+        diffs = [recent[i] - recent[i - 1] for i in range(1, len(recent))]
+        return sum(diffs) / len(diffs)
+
     def to_json(self):
         return {
             "is_conceder": self.is_conceder,

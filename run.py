@@ -21,10 +21,27 @@ settings = {
             "class": "agents.group7_agent.template_agent.TemplateAgent",
             "parameters": {"storage_dir": "agent_storage/TemplateAgent"},
         },
+        # {
+        #     "class": "agents.linear_agent.linear_agent.LinearAgent",
+        #     "parameters": {"storage_dir": "agent_storage/LinearAgent"},
+        # },
+        # {
+        #     "class": "agents.boulware_agent.boulware_agent.BoulwareAgent",
+        #     "parameters": {"storage_dir": "agent_storage/BoulwareAgent"},
+        # },
+        # {
+        #     "class": "agents.conceder_agent.conceder_agent.ConcederAgent",
+        #     "parameters": {"storage_dir": "agent_storage/ConcederAgent"},
+        # },
+        # {
+        #     "class": "agents.hardliner_agent.hardliner_agent.HardlinerAgent",
+        #     "parameters": {"storage_dir": "agent_storage/HardlinerAgent"},
+        # },
         {
-            "class": "agents.group7_agent2.template_agent.TemplateAgent",
-            "parameters": {"storage_dir": "agent_storage/TemplateAgent2"},
+            "class": "agents.CSE3210.agent2.agent2.Agent2",
+            "parameters": {"storage_dir": "agent_storage/Agent2"},
         },
+
     ],
     "profiles": ["domains/domain00/profileA.json", "domains/domain00/profileB.json"],
     "deadline_time_ms": 10000,

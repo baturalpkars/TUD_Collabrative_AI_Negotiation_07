@@ -156,6 +156,7 @@ class TemplateAgent(DefaultParty):
             if self.opponent_model is None:
                 self.opponent_model = OpponentModel(self.domain)
                 self.load_opponent_model(self.other)
+                self.apply_historical_bias() # Learn from historical data
 
             bid = cast(Offer, action).getBid()
 
@@ -214,12 +215,43 @@ class TemplateAgent(DefaultParty):
     ###########################################################################################
     ################################## Example methods below ##################################
     ###########################################################################################
-    def get_target_utility(self, progress: float, beta: float = 0.2) -> float:
+    def get_adaptive_beta(self) -> float:
+        # Default beta
+        beta = 0.2
+
+        if self.opponent_model:
+            if self.opponent_model.is_conceder:
+                beta = 0.1  # Very slow concession against conceders
+            elif self.opponent_model.is_stubborn:
+                beta = 0.5  # Faster concession against stubborn opponents
+
+        return beta
+
+    def apply_historical_bias(self):
+        """
+        Boosts value counts in the opponent model based on saved data,
+        so early predictions reflect historical preferences.
+        """
+        if not self.opponent_model:
+            return
+
+        for issue, estimator in self.opponent_model.issue_estimators.items():
+            total = sum(val_est.count for val_est in estimator.value_trackers.values())
+            if total == 0:
+                continue
+
+            for val, val_est in estimator.value_trackers.items():
+                frequency = val_est.count / total
+                if frequency > 0.1:  # Only values seen more than 10%
+                    val_est.count += 1  # Boost by 1 (tune this if needed)
+
+    def get_target_utility(self, progress: float) -> float:
         """
         Computes a time-dependent utility threshold.
-        Boulware (beta < 1): high utility until late rounds.
+        Stubborn (beta < 1): high utility until late rounds.
         Conceder (beta > 1): faster concession.
         """
+        beta = self.get_adaptive_beta()
         return 1 - (progress ** (1 / beta))
 
     def accept_condition(self, bid: Bid) -> bool:
@@ -229,7 +261,7 @@ class TemplateAgent(DefaultParty):
         # progress of the negotiation session between 0 and 1 (1 is deadline)
         progress = self.progress.get(time() * 1000)
         my_util = float(self.profile.getUtility(bid))
-        target_util = self.get_target_utility(progress, beta=0.2)
+        target_util = self.get_target_utility(progress)
 
         # Optional: Predict our next bid's utility
         planned_bid = self.find_bid()
@@ -237,6 +269,9 @@ class TemplateAgent(DefaultParty):
 
         # Dynamic threshold — becomes softer as time progresses
         reservation_threshold = 0.6 - 0.4 * progress
+
+        if progress < 0.05 and my_util < 0.7:
+            return False
 
         # reject weak offers and wait for better ones, knowing the opponent is likely to give in
         if self.opponent_model and self.opponent_model.is_conceder:
@@ -256,6 +291,14 @@ class TemplateAgent(DefaultParty):
         if my_util < reservation_threshold:
             return False
 
+        # Delay acceptance if opponent utility is improving (they're conceding)
+        if self.opponent_model:
+            trend = self.opponent_model.get_recent_utility_trend()
+            if trend > 0.01 and progress < 0.95:
+                self.logger.log(logging.INFO,
+                                f"[ACCEPT] Opponent utility trend rising ({trend:.4f}), waiting for better.")
+                return False
+
         # Accept if offer is better than what we would offer with a better threshold,
         # act more greedy if opponent is a conceder
         if self.opponent_model and self.opponent_model.is_conceder:
@@ -268,9 +311,29 @@ class TemplateAgent(DefaultParty):
         all_bids = AllBidsList(domain)
 
         progress = self.progress.get(time() * 1000)
-        target_util = self.get_target_utility(progress, beta=0.2)
+        target_util = self.get_target_utility(progress)
 
         margin = 0.05  # accept bids within this range
+
+        # # ---------- EXPLORATION PHASE ----------
+        # if self.opponent_model and progress < 0.05:  # first 5% of the time
+        #     explored_values = set()
+        #     exploratory_bids = []
+        #
+        #     for _ in range(1000):
+        #         bid = all_bids.get(randint(0, all_bids.size() - 1))
+        #         values_tuple = tuple(str(bid.getValue(issue)) for issue in self.domain.getIssues())
+        #
+        #         if values_tuple not in explored_values:
+        #             exploratory_bids.append(bid)
+        #             explored_values.add(values_tuple)
+        #
+        #         if len(exploratory_bids) >= 5:
+        #             break  # 5 distinct offers is enough for quick learning
+        #
+        #     if exploratory_bids:
+        #         self.logger.log(logging.INFO, "[Agent] Early round: Exploring diverse bids")
+        #         return exploratory_bids[randint(0, len(exploratory_bids) - 1)]
 
         # --- Adjust target utility based on opponent type ---
         if self.opponent_model:
@@ -298,7 +361,7 @@ class TemplateAgent(DefaultParty):
             for _ in range(1000):
                 bid = all_bids.get(randint(0, all_bids.size() - 1))
                 util = float(self.profile.getUtility(bid))
-                if util >= 0.6:  # Don't go too low
+                if util >= 0.6:  # Don't go too low -- 0.7 could work
                     fallback_bids.append(bid)
 
             if fallback_bids:
@@ -345,5 +408,9 @@ class TemplateAgent(DefaultParty):
             opponent_utility = self.opponent_model.get_predicted_utility(bid)
             opponent_score = (1.0 - alpha) * time_pressure * opponent_utility
             score += opponent_score
+
+            # Value familiarity adjustment
+            familiarity = self.opponent_model.get_value_familiarity(bid)
+            score *= 0.9 + 0.1 * familiarity  # Boost score up to +10% if all values are familiar
 
         return score
