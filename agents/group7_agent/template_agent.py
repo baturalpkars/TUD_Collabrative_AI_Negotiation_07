@@ -1,4 +1,6 @@
 import logging
+import os
+import json
 from random import randint
 from time import time
 from typing import cast
@@ -81,6 +83,9 @@ class TemplateAgent(DefaultParty):
             self.domain = self.profile.getDomain()
             profile_connection.close()
 
+            if self.opponent_model is None:
+                self.opponent_model = OpponentModel(self.domain)
+
         # ActionDone informs you of an action (an offer or an accept)
         # that is performed by one of the agents (including yourself).
         elif isinstance(data, ActionDone):
@@ -150,6 +155,7 @@ class TemplateAgent(DefaultParty):
             # create opponent model if it was not yet initialised
             if self.opponent_model is None:
                 self.opponent_model = OpponentModel(self.domain)
+                self.load_opponent_model(self.other)
 
             bid = cast(Offer, action).getBid()
 
@@ -163,6 +169,17 @@ class TemplateAgent(DefaultParty):
             self.opponent_model.update(bid, normalized_time, our_utility_func=self.profile.getUtility)
             # set bid as last received
             self.last_received_bid = bid
+
+    def load_opponent_model(self, opponent_name: str):
+        path = os.path.join(self.storage_dir, f"{opponent_name}.json")
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.opponent_model.load_from_json(data)
+                    self.logger.log(logging.INFO, f"Loaded opponent model from {path}")
+            except Exception as e:
+                self.logger.log(logging.WARNING, f"Failed to load opponent model: {e}")
 
     def my_turn(self):
         """This method is called when it is our turn. It should decide upon an action
@@ -185,9 +202,14 @@ class TemplateAgent(DefaultParty):
         for learning capabilities. Note that no extensive calculations can be done within this method.
         Taking too much time might result in your agent being killed, so use it for storage only.
         """
-        data = "Data for learning (see README.md)"
-        with open(f"{self.storage_dir}/data.md", "w") as f:
-            f.write(data)
+        if self.other and self.opponent_model:
+            path = os.path.join(self.storage_dir, f"{self.other}.json")
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(self.opponent_model.to_json(), f, indent=2)
+                    self.logger.log(logging.INFO, f"Saved opponent model for {self.other} to {path}")
+            except Exception as e:
+                self.logger.log(logging.WARNING, f"Failed to save model: {e}")
 
     ###########################################################################################
     ################################## Example methods below ##################################
@@ -220,6 +242,17 @@ class TemplateAgent(DefaultParty):
         if self.opponent_model and self.opponent_model.is_conceder:
             reservation_threshold += 0.05
 
+        # If the opponent is a hardliner, be more cautious
+        # DEADLOCK override — take the best we can get
+        if self.opponent_model and (self.opponent_model.in_deadlock and self.opponent_model.is_stubborn and
+                                    not self.opponent_model.is_late_conceder):
+            if progress > 0.9:
+                return my_util >= 0.3  # Adjustable
+            # elif progress > 0.8:
+            #     return my_util >= 0.5
+            # elif progress > 0.7:
+            #     return my_util >= 0.6
+
         if my_util < reservation_threshold:
             return False
 
@@ -237,11 +270,17 @@ class TemplateAgent(DefaultParty):
         progress = self.progress.get(time() * 1000)
         target_util = self.get_target_utility(progress, beta=0.2)
 
-        # If they’re conceding, they’ll come to you.
-        if self.opponent_model and self.opponent_model.is_conceder:
-            target_util = min(target_util + 0.05, 1.0)
-
         margin = 0.05  # accept bids within this range
+
+        # --- Adjust target utility based on opponent type ---
+        if self.opponent_model:
+            if self.opponent_model.is_conceder:
+                target_util = min(target_util + 0.05, 1.0)  # be greedy, wait them out
+            elif self.opponent_model.is_stubborn:
+                target_util = max(target_util - 0.05, 0.7)  # slightly more flexible
+            if self.opponent_model and self.opponent_model.in_deadlock:
+                target_util = max(0.55, target_util - 0.1)
+                margin = 0.1  # widen the margin to find more acceptable bids
 
         candidate_bids = []
 
@@ -251,8 +290,21 @@ class TemplateAgent(DefaultParty):
             if abs(util - target_util) <= margin:
                 candidate_bids.append(bid)
 
-        if not candidate_bids:
-            return all_bids.get(randint(0, all_bids.size() - 1))
+        # --- Fallback mechanism if no good bids OR deadlock detected ---
+        if not candidate_bids or (self.opponent_model and self.opponent_model.in_deadlock):
+            self.logger.log(logging.INFO, "[Agent] Triggering fallback due to deadlock or empty candidate list.")
+            fallback_bids = []
+
+            for _ in range(1000):
+                bid = all_bids.get(randint(0, all_bids.size() - 1))
+                util = float(self.profile.getUtility(bid))
+                if util >= 0.6:  # Don't go too low
+                    fallback_bids.append(bid)
+
+            if fallback_bids:
+                return max(fallback_bids, key=lambda b: self.opponent_model.get_predicted_utility(b))
+            else:
+                return all_bids.get(randint(0, all_bids.size() - 1))  # fallback random
 
         best_bid = max(candidate_bids, key=self.score_bid)
 

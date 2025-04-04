@@ -18,6 +18,11 @@ class OpponentModel:
 
         self.my_utilities = []  # Utility of their bids from our perspective
         self.is_conceder = False  # Flag
+        self.is_stubborn = False  # Flag
+        self.in_deadlock = False
+        self.late_utilities = []  # Utilities between 0.85–0.95
+        self.final_utilities = []  # Utilities after 0.95
+        self.is_late_conceder = False  # New flag for Boulware-like late concession
 
     def update(self, bid: Bid, time: float, our_utility_func=None):
         if self.offers:
@@ -30,7 +35,17 @@ class OpponentModel:
 
         if our_utility_func:
             self.my_utilities.append(our_utility_func(bid))
+
+            if 0.85 <= time < 0.95:
+                self.late_utilities.append(our_utility_func(bid))
+            elif time >= 0.95:
+                self.final_utilities.append(our_utility_func(bid))
+
+            self._detect_late_conceder()
             self._detect_conceder()
+            self._detect_boulware()
+            self._detect_hardliner()
+            self._detect_deadlock()
 
         # print(f"\n[OpponentModel] Time: {time:.2f}")
         # print(f"[OpponentModel] Consistency score: {self.consistency_score:.4f}")
@@ -40,12 +55,52 @@ class OpponentModel:
         for issue_id, issue_estimator in self.issue_estimators.items():
             issue_estimator.update(bid.getValue(issue_id), time)
 
+    # Detects if the opponent is conceding by checking if the utility has increased
     def _detect_conceder(self, window=5, threshold=0.2):
         if len(self.my_utilities) >= 2 * window:
             early = sum(self.my_utilities[:window]) / window
             recent = sum(self.my_utilities[-window:]) / window
             if (recent - early) >= threshold:
                 self.is_conceder = True
+
+    def _detect_late_conceder(self, threshold=0.05):
+        if len(self.late_utilities) >= 2 and len(self.final_utilities) >= 2:
+            avg_late = sum(self.late_utilities) / len(self.late_utilities)
+            avg_final = sum(self.final_utilities) / len(self.final_utilities)
+            delta = avg_final - avg_late
+
+            if delta > threshold:
+                self.is_late_conceder = True
+
+    # If the recent average is greater than the early average, it's a Boulware -- stubborn
+    def _detect_boulware(self, window=5, threshold=0.1):
+        # Compares early and recent windows. A slight concession increase indicates Boulware
+        if len(self.my_utilities) >= 2 * window:
+            early_avg = sum(self.my_utilities[:window]) / window
+            recent_avg = sum(self.my_utilities[-window:]) / window
+            delta = recent_avg - early_avg
+
+            if 0 < delta < threshold:
+                self.is_stubborn = True
+
+    # If the recent average is less than the early average, it's a hardliner -- stubborn
+    def _detect_hardliner(self, window=5, threshold=0.05):
+        if len(self.my_utilities) >= 2 * window:
+            early_avg = sum(self.my_utilities[:window]) / window
+            recent_avg = sum(self.my_utilities[-window:]) / window
+            delta = recent_avg - early_avg
+
+            if delta < threshold:
+                self.is_stubborn = True
+
+    # Detects if the opponent is in a deadlock by checking if the utility has not changed
+    def _detect_deadlock(self, window=6, threshold=0.01):
+        if len(self.my_utilities) < window:
+            return
+        recent = self.my_utilities[-window:]
+        diffs = [abs(recent[i] - recent[i - 1]) for i in range(1, len(recent))]
+        if all(d < threshold for d in diffs):
+            self.in_deadlock = True
 
     def _calculate_similarity(self, bid1: Bid, bid2: Bid):
         matches = 0
@@ -85,9 +140,37 @@ class OpponentModel:
             [iw * vu for iw, vu in zip(issue_weights, value_utilities)]
         )
 
-        print(f"[OpponentModel] Predicted utility for bid {bid.getIssueValues()}: {predicted_utility:.4f}")
+        # print(f"[OpponentModel] Predicted utility for bid {bid.getIssueValues()}: {predicted_utility:.4f}")
 
         return predicted_utility
+
+    def to_json(self):
+        return {
+            "is_conceder": self.is_conceder,
+            "issue_weights": {
+                issue: {
+                    "weight": est.weight,
+                    "value_counts": {
+                        str(val): est.value_trackers[val].count
+                        for val in est.value_trackers
+                    }
+                }
+                for issue, est in self.issue_estimators.items()
+            }
+        }
+
+    def load_from_json(self, data: dict):
+        self.is_conceder = data.get("is_conceder", False)
+        for issue, issue_data in data.get("issue_weights", {}).items():
+            if issue not in self.issue_estimators:
+                continue
+            est = self.issue_estimators[issue]
+            est.weight = issue_data.get("weight", 0.0)
+            for val_str, count in issue_data.get("value_counts", {}).items():
+
+                for val in est.value_trackers:
+                    if str(val) == val_str:
+                        est.value_trackers[val].count = count
 
 
 class IssueEstimator:

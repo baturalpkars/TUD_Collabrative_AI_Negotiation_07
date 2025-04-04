@@ -18,30 +18,30 @@ if not RESULTS_DIR.exists():
 tournament_settings = {
     "agents": [
         {
-            "class": "agents.group7_agent2.template_agent.TemplateAgent",
-            "parameters": {"storage_dir": "agent_storage/TemplateAgent2"},
+            "class": "agents.group7_agent.template_agent.TemplateAgent",
+            "parameters": {"storage_dir": "agent_storage/TemplateAgent"},
         },
-        # {
-        #     "class": "agents.boulware_agent.boulware_agent.BoulwareAgent",
-        # },
-        # {
-        #     "class": "agents.conceder_agent.conceder_agent.ConcederAgent",
-        # },
+        {
+            "class": "agents.boulware_agent.boulware_agent.BoulwareAgent",
+        },
+        {
+            "class": "agents.conceder_agent.conceder_agent.ConcederAgent",
+        },
         # {
         #     "class": "agents.hardliner_agent.hardliner_agent.HardlinerAgent",
         # },
-        {
-            "class": "agents.linear_agent.linear_agent.LinearAgent",
-        },
-        {
-            "class": "agents.random_agent.random_agent.RandomAgent",
-        },
+        # {
+        #     "class": "agents.linear_agent.linear_agent.LinearAgent",
+        # },
+        # {
+        #     "class": "agents.random_agent.random_agent.RandomAgent",
+        # },
         # {
         #     "class": "agents.stupid_agent.stupid_agent.StupidAgent",
         # },
-        # {
-        #     "class": "agents.CSE3210.agent2.agent2.Agent2",
-        # },
+        {
+            "class": "agents.CSE3210.agent2.agent2.Agent2",
+        },
         # {
         #     "class": "agents.CSE3210.agent3.agent3.Agent3",
         # },
@@ -118,12 +118,12 @@ tournament_settings = {
     "profile_sets": [
         ["domains/domain00/profileA.json", "domains/domain00/profileB.json"],
         ["domains/domain01/profileA.json", "domains/domain01/profileB.json"],
-        ["domains/domain02/profileA.json", "domains/domain02/profileB.json"],
-        ["domains/domain03/profileA.json", "domains/domain03/profileB.json"],
-        ["domains/domain04/profileA.json", "domains/domain04/profileB.json"],
-        ["domains/domain05/profileA.json", "domains/domain05/profileB.json"],
-        ["domains/domain06/profileA.json", "domains/domain06/profileB.json"],
-        ["domains/domain07/profileA.json", "domains/domain07/profileB.json"],
+        # ["domains/domain02/profileA.json", "domains/domain02/profileB.json"],
+        # ["domains/domain03/profileA.json", "domains/domain03/profileB.json"],
+        # ["domains/domain04/profileA.json", "domains/domain04/profileB.json"],
+        # ["domains/domain05/profileA.json", "domains/domain05/profileB.json"],
+        # ["domains/domain06/profileA.json", "domains/domain06/profileB.json"],
+        # ["domains/domain07/profileA.json", "domains/domain07/profileB.json"],
         # ["domains/domain08/profileA.json", "domains/domain08/profileB.json"],
         # ["domains/domain09/profileA.json", "domains/domain09/profileB.json"],
         # ["domains/domain10/profileA.json", "domains/domain10/profileB.json"],
