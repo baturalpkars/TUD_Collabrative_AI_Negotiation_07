@@ -223,7 +223,7 @@ class TemplateAgent(DefaultParty):
             if self.opponent_model.is_conceder:
                 beta = 0.1  # Very slow concession against conceders
             elif self.opponent_model.is_stubborn:
-                beta = 0.5  # Faster concession against stubborn opponents
+                beta = 0.3  # Faster concession against stubborn opponents
 
         return beta
 
@@ -270,8 +270,8 @@ class TemplateAgent(DefaultParty):
         # Dynamic threshold — becomes softer as time progresses
         reservation_threshold = 0.6 - 0.4 * progress
 
-        if progress < 0.05 and my_util < 0.7:
-            return False
+        # if progress < 0.05 and my_util < 0.8:
+        #     return False
 
         # reject weak offers and wait for better ones, knowing the opponent is likely to give in
         if self.opponent_model and self.opponent_model.is_conceder:
@@ -303,8 +303,12 @@ class TemplateAgent(DefaultParty):
         # act more greedy if opponent is a conceder
         if self.opponent_model and self.opponent_model.is_conceder:
             return my_util >= 0.95 * planned_util  # more greedy
-        else:
-            return my_util >= max(target_util, 0.85 * planned_util)
+
+        # For others, delay acceptance unless very close to deadline or bid is very good
+        if progress < 0.85 and my_util < 0.9 * planned_util:
+            return False
+
+        return my_util >= max(target_util, 0.9 * planned_util)
 
     def find_bid(self) -> Bid:
         domain = self.profile.getDomain()
@@ -315,7 +319,7 @@ class TemplateAgent(DefaultParty):
 
         margin = 0.05  # accept bids within this range
 
-        # # ---------- EXPLORATION PHASE ----------
+        # ---------- EXPLORATION PHASE ----------
         # if self.opponent_model and progress < 0.05:  # first 5% of the time
         #     explored_values = set()
         #     exploratory_bids = []
@@ -361,7 +365,7 @@ class TemplateAgent(DefaultParty):
             for _ in range(1000):
                 bid = all_bids.get(randint(0, all_bids.size() - 1))
                 util = float(self.profile.getUtility(bid))
-                if util >= 0.6:  # Don't go too low -- 0.7 could work
+                if util >= 0.7:  # Don't go too low -- 0.7 could work
                     fallback_bids.append(bid)
 
             if fallback_bids:
@@ -369,9 +373,15 @@ class TemplateAgent(DefaultParty):
             else:
                 return all_bids.get(randint(0, all_bids.size() - 1))  # fallback random
 
-        best_bid = max(candidate_bids, key=self.score_bid)
+        # --- Strategic selection among top N ---
+        scored_candidates = [(self.score_bid(bid), bid) for bid in candidate_bids]
+        scored_candidates.sort(reverse=True, key=lambda x: x[0])
+        top_bids = [bid for _, bid in scored_candidates[:5]]
 
-        return best_bid
+        if top_bids:
+            return top_bids[randint(0, len(top_bids) - 1)]
+        else:
+            return all_bids.get(randint(0, all_bids.size() - 1))
 
     def score_bid(self, bid: Bid, alpha_start: float = 0.95, alpha_end: float = 0.5, eps: float = 0.1) -> float:
         """

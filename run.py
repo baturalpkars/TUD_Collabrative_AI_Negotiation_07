@@ -38,8 +38,8 @@ settings = {
         #     "parameters": {"storage_dir": "agent_storage/HardlinerAgent"},
         # },
         {
-            "class": "agents.group7_agent2.template_agent.TemplateAgent",
-            "parameters": {"storage_dir": "agent_storage/TemplateAgent2"},
+            "class": "agents.group7_agent4.template_agent.TemplateAgent",
+            "parameters": {"storage_dir": "agent_storage/TemplateAgent4"},
         },
 
     ],
