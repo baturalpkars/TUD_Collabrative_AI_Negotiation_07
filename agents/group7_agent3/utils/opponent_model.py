@@ -85,7 +85,7 @@ class OpponentModel:
             [iw * vu for iw, vu in zip(issue_weights, value_utilities)]
         )
 
-        print(f"[OpponentModel] Predicted utility for bid {bid.getIssueValues()}: {predicted_utility:.4f}")
+        # print(f"[OpponentModel] Predicted utility for bid {bid.getIssueValues()}: {predicted_utility:.4f}")
 
         return predicted_utility
 

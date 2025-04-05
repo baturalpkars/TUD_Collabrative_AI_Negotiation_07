@@ -32,7 +32,7 @@ from tudelft_utilities_logging.ReportToLogger import ReportToLogger
 from .utils.opponent_model import OpponentModel
 
 
-class TemplateAgent(DefaultParty):
+class TemplateAgent2(DefaultParty):
     """
     Template of a Python geniusweb agent.
     """
@@ -82,6 +82,9 @@ class TemplateAgent(DefaultParty):
             self.profile = profile_connection.getProfile()
             self.domain = self.profile.getDomain()
             profile_connection.close()
+
+            if self.opponent_model is None:
+                self.opponent_model = OpponentModel(self.domain)
 
         # ActionDone informs you of an action (an offer or an accept)
         # that is performed by one of the agents (including yourself).

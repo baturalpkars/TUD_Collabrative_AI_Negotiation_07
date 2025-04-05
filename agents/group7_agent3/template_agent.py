@@ -30,7 +30,7 @@ from tudelft_utilities_logging.ReportToLogger import ReportToLogger
 from .utils.opponent_model import OpponentModel
 
 
-class TemplateAgent(DefaultParty):
+class TemplateAgent3(DefaultParty):
     """
     Template of a Python geniusweb agent.
     """
@@ -81,6 +81,9 @@ class TemplateAgent(DefaultParty):
             self.domain = self.profile.getDomain()
             profile_connection.close()
 
+            if self.opponent_model is None:
+                self.opponent_model = OpponentModel(self.domain)
+
         # ActionDone informs you of an action (an offer or an accept)
         # that is performed by one of the agents (including yourself).
         elif isinstance(data, ActionDone):
@@ -101,7 +104,7 @@ class TemplateAgent(DefaultParty):
 
         # Finished will be send if the negotiation has ended (through agreement or deadline)
         elif isinstance(data, Finished):
-            self.save_data()
+            # self.save_data()
             # terminate the agent MUST BE CALLED
             self.logger.log(logging.INFO, "party is terminating:")
             super().terminate()
