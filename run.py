@@ -38,8 +38,8 @@ settings = {
         #     "parameters": {"storage_dir": "agent_storage/HardlinerAgent"},
         # },
         {
-            "class": "agents.CSE3210.agent2.agent2.Agent2",
-            "parameters": {"storage_dir": "agent_storage/Agent2"},
+            "class": "agents.group7_agent2.template_agent.TemplateAgent",
+            "parameters": {"storage_dir": "agent_storage/TemplateAgent2"},
         },
 
     ],
