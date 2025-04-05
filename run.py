@@ -22,14 +22,14 @@ settings = {
             "parameters": {"storage_dir": "agent_storage/TemplateAgent"},
         },
         {
-            "class": "agents.group7_agent2.template_agent.TemplateAgent",
-            "parameters": {"storage_dir": "agent_storage/TemplateAgent2"},
+            "class": "agents.boulware_agent.boulware_agent.BoulwareAgent",
+            "parameters": {"storage_dir": "agent_storage/BoulwareAgent"},
         },
     ],
-    "profiles": ["domains/domain00/profileA.json", "domains/domain00/profileB.json"],
+    "profiles": ["domains/domain32/profileA.json", "domains/domain32/profileB.json"],
     "deadline_time_ms": 10000,
 }
-
+ 
 # run a session and obtain results in dictionaries
 session_results_trace, session_results_summary = run_session(settings)
 
